@@ -138,4 +138,4 @@ async def get_all():
 # ============ DASHBOARD SERVE ============
 @app.get("/dashboard")
 def serve_dashboard():
-    return FileResponse("../frontend/dashboard.html")
+    return FileResponse("dashboard.html")
