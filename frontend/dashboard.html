@@ -7,7 +7,6 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: 'Segoe UI', sans-serif;
-    background: #0f0c29;
     background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
     color: #fff;
     min-height: 100vh;
@@ -23,8 +22,48 @@
     text-align: center;
     color: #aaa;
     font-size: 0.9rem;
-    margin-bottom: 25px;
+    margin-bottom: 20px;
   }
+  .voice-bar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin: 20px 0;
+    padding: 15px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 14px;
+    border: 1px solid rgba(0,210,255,0.3);
+  }
+  .mic-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #00d2ff, #3a47d5);
+    border: none;
+    cursor: pointer;
+    font-size: 1.5rem;
+    color: #fff;
+    transition: all 0.3s;
+    box-shadow: 0 5px 20px rgba(0,210,255,0.4);
+  }
+  .mic-btn:hover { transform: scale(1.1); }
+  .mic-btn.listening {
+    background: linear-gradient(135deg, #ff5252, #d32f2f);
+    animation: pulse 1s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 5px 20px rgba(255,82,82,0.6); }
+    50% { transform: scale(1.15); box-shadow: 0 5px 30px rgba(255,82,82,0.9); }
+  }
+  .voice-status {
+    flex: 1;
+    text-align: left;
+    color: #ccc;
+    font-size: 0.95rem;
+    min-height: 24px;
+  }
+  .voice-status.active { color: #00d2ff; }
   .section {
     font-size: 1.2rem;
     margin: 25px 0 15px;
@@ -41,19 +80,10 @@
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 14px;
     padding: 18px;
-    transition: transform 0.2s;
   }
-  .card:hover { transform: translateY(-3px); }
   .card.gold { border-color: gold; }
-  .symbol {
-    font-size: 1.1rem;
-    font-weight: 700;
-  }
-  .price {
-    font-size: 1.6rem;
-    font-weight: 800;
-    margin: 10px 0 6px;
-  }
+  .symbol { font-size: 1.1rem; font-weight: 700; }
+  .price { font-size: 1.6rem; font-weight: 800; margin: 10px 0 6px; }
   .change { font-size: 0.9rem; font-weight: 600; }
   .up { color: #00e676; }
   .down { color: #ff5252; }
@@ -77,12 +107,7 @@
     padding: 15px;
     border: 1px solid rgba(255,255,255,0.1);
   }
-  .tabs {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
-    flex-wrap: wrap;
-  }
+  .tabs { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
   .tab {
     padding: 8px 18px;
     background: rgba(255,255,255,0.05);
@@ -106,12 +131,32 @@
     overflow: hidden;
     background: #131722;
   }
+  .answer-box {
+    display: none;
+    margin: 15px 0;
+    padding: 18px;
+    background: rgba(0,210,255,0.1);
+    border: 1px solid #00d2ff;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 1.05rem;
+  }
+  .answer-box.show { display: block; }
 </style>
 </head>
 <body>
 
 <h1>JARVIS</h1>
 <p class="sub">Live Market Dashboard - Crypto / Forex / Gold</p>
+
+<div class="voice-bar">
+  <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎤</button>
+  <div class="voice-status" id="voiceStatus">
+    Mic button dabao aur bolo: "Bitcoin price", "Gold rate", "Market summary"
+  </div>
+</div>
+
+<div class="answer-box" id="answerBox"></div>
 
 <div class="chart-section">
   <div class="tabs">
@@ -130,7 +175,7 @@
 <div class="status" id="status">Connecting...</div>
 
 <script>
-var API = "http://127.0.0.1:8000";
+var API = window.location.origin;
 
 function fmt(n, d) {
   if (n === null || n === undefined) return "-";
@@ -175,11 +220,9 @@ function loadData() {
       html += '<div class="section">Crypto</div><div class="grid">';
       html += data.crypto.map(cryptoCard).join("");
       html += '</div>';
-
       html += '<div class="section">Forex & Gold</div><div class="grid">';
       html += data.forex_gold.map(forexCard).join("");
       html += '</div>';
-
       document.getElementById("content").innerHTML = html;
       document.getElementById("status").textContent = "Last updated: " + new Date().toLocaleTimeString();
     })
@@ -194,10 +237,8 @@ var currentSymbol = "BINANCE:BTCUSDT";
 function buildChart(symbol) {
   var container = document.getElementById("chart-container");
   container.innerHTML = '<div id="tv-chart" style="height:100%"></div>';
-  
   var oldScript = document.getElementById("tv-script");
   if (oldScript) oldScript.remove();
-  
   var script = document.createElement("script");
   script.id = "tv-script";
   script.src = "https://s3.tradingview.com/tv.js";
@@ -227,8 +268,183 @@ function loadChart(symbol, btn) {
   buildChart(symbol);
 }
 
+/* ============ VOICE ASSISTANT ============ */
+var listening = false;
+var recognition = null;
+
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  var u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-IN";
+  u.rate = 1;
+  window.speechSynthesis.speak(u);
+}
+
+function showAnswer(text) {
+  var box = document.getElementById("answerBox");
+  box.textContent = "🤖 " + text;
+  box.classList.add("show");
+}
+
+function setStatus(text, active) {
+  var el = document.getElementById("voiceStatus");
+  el.textContent = text;
+  if (active) el.classList.add("active");
+  else el.classList.remove("active");
+}
+
+function toggleMic() {
+  if (listening) {
+    stopMic();
+  } else {
+    startMic();
+  }
+}
+
+function startMic() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    alert("Aapka browser voice support nahi karta. Chrome ya Edge use karo.");
+    return;
+  }
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR();
+  recognition.lang = "en-IN";
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = function() {
+    listening = true;
+    document.getElementById("micBtn").classList.add("listening");
+    setStatus("🎙️ Sun raha hoon... ab bolo", true);
+  };
+
+  recognition.onresult = function(event) {
+    var text = event.results[0][0].transcript.toLowerCase();
+    setStatus("👤 Aap: " + text, true);
+    handleCommand(text);
+  };
+
+  recognition.onerror = function(event) {
+    setStatus("Error: " + event.error + ". Dobara try karo.", false);
+    listening = false;
+    document.getElementById("micBtn").classList.remove("listening");
+  };
+
+  recognition.onend = function() {
+    listening = false;
+    document.getElementById("micBtn").classList.remove("listening");
+  };
+
+  recognition.start();
+}
+
+function stopMic() {
+  if (recognition) recognition.stop();
+  listening = false;
+  document.getElementById("micBtn").classList.remove("listening");
+  setStatus("Mic band. Dobara dabao bolne ke liye.", false);
+}
+
+function handleCommand(cmd) {
+  fetch(API + "/api/all")
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var answer = "";
+
+      // Bitcoin
+      if (cmd.indexOf("bitcoin") !== -1 || cmd.indexOf("btc") !== -1) {
+        var btc = findCrypto(data, "BTC");
+        if (btc) answer = "Bitcoin " + btc.price.toFixed(0) + " dollars pe hai, " + Math.abs(btc.change_24h).toFixed(2) + " percent " + (btc.change_24h >= 0 ? "upar" : "neeche") + ".";
+      }
+
+      // Ethereum
+      else if (cmd.indexOf("ethereum") !== -1 || cmd.indexOf("eth") !== -1) {
+        var eth = findCrypto(data, "ETH");
+        if (eth) answer = "Ethereum " + eth.price.toFixed(0) + " dollars pe hai.";
+      }
+
+      // Solana
+      else if (cmd.indexOf("solana") !== -1 || cmd.indexOf(" sol") !== -1) {
+        var sol = findCrypto(data, "SOL");
+        if (sol) answer = "Solana " + sol.price.toFixed(2) + " dollars pe hai.";
+      }
+
+      // BNB
+      else if (cmd.indexOf("bnb") !== -1) {
+        var bnb = findCrypto(data, "BNB");
+        if (bnb) answer = "BNB " + bnb.price.toFixed(2) + " dollars pe hai.";
+      }
+
+      // Gold
+      else if (cmd.indexOf("gold") !== -1  cmd.indexOf("sona") !== -1  cmd.indexOf("xau") !== -1) {
+        var gold = findForex(data, "XAU");
+        if (gold && gold.price) answer = "Gold " + gold.price.toFixed(2) + " dollars per ounce hai.";
+        else answer = "Gold ka data abhi nahi mil raha. TwelveData limit issue ho sakta hai.";
+      }
+
+      // Euro
+      else if (cmd.indexOf("euro") !== -1 || cmd.indexOf("eur") !== -1) {
+        var eur = findForex(data, "EUR");
+        if (eur && eur.price) answer = "Euro dollar ke against " + eur.price.toFixed(4) + " hai.";
+        else answer = "Euro ka data abhi nahi mil raha.";
+      }
+
+      // Pound
+      else if (cmd.indexOf("pound") !== -1 || cmd.indexOf("gbp") !== -1) {
+        var gbp = findForex(data, "GBP");
+        if (gbp && gbp.price) answer = "Pound " + gbp.price.toFixed(4) + " pe hai.";
+        else answer = "Pound ka data abhi nahi mil raha.";
+      }
+
+      // Yen
+      else if (cmd.indexOf("yen") !== -1 || cmd.indexOf("jpy") !== -1) {
+        var jpy = findForex(data, "JPY");
+        if (jpy && jpy.price) answer = "Dollar yen ke against " + jpy.price.toFixed(2) + " hai.";
+        else answer = "Yen ka data abhi nahi mil raha.";
+      }
+
+      // Summary
+      else if (cmd.indexOf("market") !== -1  cmd.indexOf("summary") !== -1  cmd.indexOf("sab") !== -1) {
+        var b = findCrypto(data, "BTC");
+        var g = findForex(data, "XAU");
+        answer = "Market update: ";
+        if (b) answer += "Bitcoin " + b.price.toFixed(0) + " dollars. ";
+        if (g && g.price) answer += "Gold " + g.price.toFixed(0) + " dollars.";
+      }
+
+      else {
+        answer = "Maaf kijiye, samajh nahi aaya. Bitcoin, Ethereum, Gold, ya market summary poochiye.";
+      }
+
+      if (!answer) answer = "Data nahi mil raha.";
+      showAnswer(answer);
+      speak(answer);
+      setStatus("✅ Jawab diya", false);
+    })
+    .catch(function() {
+      showAnswer("Server se connect nahi ho pa raha.");
+    });
+}
+
+function findCrypto(data, name) {
+  for (var i = 0; i < data.crypto.length; i++) {
+    if (data.crypto[i].name === name) return data.crypto[i];
+  }
+  return null;
+}
+
+function findForex(data, sym) {
+  for (var i = 0; i < data.forex_gold.length; i++) {
+    if (data.forex_gold[i].symbol.indexOf(sym) !== -1) return data.forex_gold[i];
+  }
+  return null;
+}
+
+/* ============ INIT ============ */
 loadData();
-setInterval(loadData, 10000);
+setInterval(loadData, 15000);
 buildChart(currentSymbol);
 </script>
 
