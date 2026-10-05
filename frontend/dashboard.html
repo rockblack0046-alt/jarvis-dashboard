@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Jarvis Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #0f0c29;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    color: #fff;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 2rem;
+    color: #00d2ff;
+    margin-bottom: 8px;
+  }
+  .sub {
+    text-align: center;
+    color: #aaa;
+    font-size: 0.9rem;
+    margin-bottom: 25px;
+  }
+  .section {
+    font-size: 1.2rem;
+    margin: 25px 0 15px;
+    padding-left: 12px;
+    border-left: 4px solid #00d2ff;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 15px;
+  }
+  .card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 18px;
+    transition: transform 0.2s;
+  }
+  .card:hover { transform: translateY(-3px); }
+  .card.gold { border-color: gold; }
+  .symbol {
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .price {
+    font-size: 1.6rem;
+    font-weight: 800;
+    margin: 10px 0 6px;
+  }
+  .change { font-size: 0.9rem; font-weight: 600; }
+  .up { color: #00e676; }
+  .down { color: #ff5252; }
+  .meta {
+    font-size: 0.75rem;
+    color: #888;
+    margin-top: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .status {
+    text-align: center;
+    margin-top: 30px;
+    font-size: 0.8rem;
+    color: #888;
+  }
+  .chart-section {
+    margin: 25px 0;
+    background: rgba(255,255,255,0.03);
+    border-radius: 14px;
+    padding: 15px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+  }
+  .tab {
+    padding: 8px 18px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-family: inherit;
+  }
+  .tab:hover { background: rgba(0,210,255,0.2); }
+  .tab.active {
+    background: #00d2ff;
+    color: #000;
+    font-weight: 700;
+    border-color: #00d2ff;
+  }
+  #chart-container {
+    height: 450px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #131722;
+  }
+</style>
+</head>
+<body>
+
+<h1>JARVIS</h1>
+<p class="sub">Live Market Dashboard - Crypto / Forex / Gold</p>
+
+<div class="chart-section">
+  <div class="tabs">
+    <button class="tab active" onclick="loadChart('BINANCE:BTCUSDT', this)">BTC/USDT</button>
+    <button class="tab" onclick="loadChart('BINANCE:ETHUSDT', this)">ETH/USDT</button>
+    <button class="tab" onclick="loadChart('BINANCE:SOLUSDT', this)">SOL/USDT</button>
+    <button class="tab" onclick="loadChart('OANDA:XAUUSD', this)">GOLD</button>
+    <button class="tab" onclick="loadChart('OANDA:EURUSD', this)">EUR/USD</button>
+    <button class="tab" onclick="loadChart('OANDA:GBPUSD', this)">GBP/USD</button>
+  </div>
+  <div id="chart-container"></div>
+</div>
+
+<div id="content">Loading...</div>
+
+<div class="status" id="status">Connecting...</div>
+
+<script>
+var API = "http://127.0.0.1:8000";
+
+function fmt(n, d) {
+  if (n === null || n === undefined) return "-";
+  if (n >= 1000) return n.toLocaleString('en-US', { maximumFractionDigits: d });
+  return Number(n).toFixed(d);
+}
+
+function cls(v) {
+  if (v === null || v === undefined) return "";
+  return v >= 0 ? "up" : "down";
+}
+
+function arrow(v) {
+  if (v === null || v === undefined) return "";
+  return v >= 0 ? "+" : "-";
+}
+
+function cryptoCard(item) {
+  return '<div class="card">' +
+    '<div class="symbol">' + item.name + '</div>' +
+    '<div class="price">$' + fmt(item.price, 2) + '</div>' +
+    '<div class="change ' + cls(item.change_24h) + '">' + arrow(item.change_24h) + fmt(Math.abs(item.change_24h || 0), 2) + '%</div>' +
+    '<div class="meta"><span>H: ' + fmt(item.high, 2) + '</span><span>L: ' + fmt(item.low, 2) + '</span></div>' +
+  '</div>';
+}
+
+function forexCard(item) {
+  var gold = item.is_gold ? " gold" : "";
+  return '<div class="card' + gold + '">' +
+    '<div class="symbol">' + item.symbol + '</div>' +
+    '<div class="price">' + fmt(item.price, 4) + '</div>' +
+    '<div class="change ' + cls(item.change_pct) + '">' + arrow(item.change_pct) + fmt(Math.abs(item.change_pct || 0), 3) + '%</div>' +
+    '<div class="meta"><span>H: ' + fmt(item.high, 4) + '</span><span>L: ' + fmt(item.low, 4) + '</span></div>' +
+  '</div>';
+}
+
+function loadData() {
+  fetch(API + "/api/all")
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var html = "";
+      html += '<div class="section">Crypto</div><div class="grid">';
+      html += data.crypto.map(cryptoCard).join("");
+      html += '</div>';
+
+      html += '<div class="section">Forex & Gold</div><div class="grid">';
+      html += data.forex_gold.map(forexCard).join("");
+      html += '</div>';
+
+      document.getElementById("content").innerHTML = html;
+      document.getElementById("status").textContent = "Last updated: " + new Date().toLocaleTimeString();
+    })
+    .catch(function(err) {
+      document.getElementById("content").innerHTML = "Server se connect nahi ho pa raha";
+      document.getElementById("status").textContent = "Disconnected";
+    });
+}
+
+var currentSymbol = "BINANCE:BTCUSDT";
+
+function buildChart(symbol) {
+  var container = document.getElementById("chart-container");
+  container.innerHTML = '<div id="tv-chart" style="height:100%"></div>';
+  
+  var oldScript = document.getElementById("tv-script");
+  if (oldScript) oldScript.remove();
+  
+  var script = document.createElement("script");
+  script.id = "tv-script";
+  script.src = "https://s3.tradingview.com/tv.js";
+  script.onload = function() {
+    new TradingView.widget({
+      "autosize": true,
+      "symbol": symbol,
+      "interval": "15",
+      "timezone": "Asia/Karachi",
+      "theme": "dark",
+      "style": "1",
+      "locale": "en",
+      "enable_publishing": false,
+      "hide_side_toolbar": false,
+      "allow_symbol_change": true,
+      "container_id": "tv-chart"
+    });
+  };
+  document.head.appendChild(script);
+}
+
+function loadChart(symbol, btn) {
+  currentSymbol = symbol;
+  var tabs = document.querySelectorAll(".tab");
+  for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove("active");
+  btn.classList.add("active");
+  buildChart(symbol);
+}
+
+loadData();
+setInterval(loadData, 10000);
+buildChart(currentSymbol);
+</script>
+
+</body>
+</html>c

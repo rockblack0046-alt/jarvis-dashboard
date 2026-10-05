@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+ccxt
+httpx
+python-dotenv
+SpeechRecognition
+pyttsx3
+pyaudio
